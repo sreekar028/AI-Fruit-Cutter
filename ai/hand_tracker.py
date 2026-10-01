@@ -219,6 +219,10 @@ if __name__ == "__main__":
     tracker = HandTracker()
     print("[INFO] Hand Tracker started. Press 'q' to quit.")
 
+    # Open the existing window in fullscreen automatically
+    cv2.namedWindow("Hand Tracker — AI Module (Member 1)", cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("Hand Tracker — AI Module (Member 1)", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
     while True:
         ret, frame = cap.read()
         if not ret:
