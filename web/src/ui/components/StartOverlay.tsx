@@ -2,14 +2,18 @@ import React from 'react';
 
 interface StartOverlayProps {
   onStart: () => void;
+  onPlayWithMouse: () => void;
   isLoadingCamera: boolean;
   cameraReady: boolean;
+  cameraError: string | null;
 }
 
 export const StartOverlay: React.FC<StartOverlayProps> = ({
   onStart,
+  onPlayWithMouse,
   isLoadingCamera,
   cameraReady,
+  cameraError,
 }) => {
   return (
     <div className="overlay-backdrop">
@@ -41,6 +45,15 @@ export const StartOverlay: React.FC<StartOverlayProps> = ({
           </ul>
         </div>
 
+        {cameraError && (
+          <div className="camera-error-banner">
+            <span className="error-icon">⚠️</span>
+            <div className="error-text-wrap">
+              <strong>Camera Notice:</strong> {cameraError}
+            </div>
+          </div>
+        )}
+
         <div className="cta-section">
           {isLoadingCamera ? (
             <div className="loading-spinner-box">
@@ -48,14 +61,23 @@ export const StartOverlay: React.FC<StartOverlayProps> = ({
               <span>Connecting webcam & MediaPipe model...</span>
             </div>
           ) : (
-            <button
-              className="start-button pulse-glow"
-              onClick={onStart}
-              disabled={!cameraReady && isLoadingCamera}
-            >
-              <span className="key-badge">SPACE</span>
-              <span className="btn-label">START GAME</span>
-            </button>
+            <div className="button-group-cta">
+              <button
+                className="start-button pulse-glow"
+                onClick={onStart}
+              >
+                <span className="key-badge">SPACE</span>
+                <span className="btn-label">{cameraReady ? 'START GAME' : 'ENABLE CAMERA & PLAY'}</span>
+              </button>
+
+              <button
+                className="mouse-fallback-btn"
+                onClick={onPlayWithMouse}
+                title="Play using mouse or touchscreen swipe without webcam"
+              >
+                <span>Play with Mouse / Touch</span>
+              </button>
+            </div>
           )}
 
           <p className="shortcut-hint">

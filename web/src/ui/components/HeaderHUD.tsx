@@ -1,10 +1,12 @@
+import React from 'react';
 import type { GameStatus } from '../../game/GameEngine';
 
 interface HeaderHUDProps {
   status: GameStatus;
+  onPause: () => void;
 }
 
-export const HeaderHUD: React.FC<HeaderHUDProps> = ({ status }) => {
+export const HeaderHUD: React.FC<HeaderHUDProps> = ({ status, onPause }) => {
   const { score, highScore, lives, timeStr, combo } = status;
 
   return (
@@ -18,9 +20,17 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({ status }) => {
           <span className="best-tag">BEST {highScore}</span>
         </div>
 
-        {/* Stopwatch Clock */}
+        {/* Stopwatch Clock & In-Game Pause Button */}
         <div className="hud-card timer-card">
           <span className="hud-value timer-val">{timeStr}</span>
+          <button
+            className="hud-pause-btn"
+            onClick={onPause}
+            title="Pause Game (P)"
+            aria-label="Pause Game"
+          >
+            ⏸
+          </button>
         </div>
 
         {/* 3-Heart Lives Display */}

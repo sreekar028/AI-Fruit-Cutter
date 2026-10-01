@@ -79,10 +79,10 @@ export class GameEngine {
     this.spawner.setDimensions(width, height);
   }
 
-  public async startWebcam(videoElement: HTMLVideoElement): Promise<boolean> {
-    const success = await this.ai.start(videoElement);
-    this._isRunning = true;
-    return success;
+  public async startWebcam(videoElement: HTMLVideoElement): Promise<{ success: boolean; error?: string }> {
+    const res = await this.ai.start(videoElement);
+    this._isRunning = res.success;
+    return res;
   }
 
   public stop() {

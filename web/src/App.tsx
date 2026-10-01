@@ -15,6 +15,8 @@ export const App: React.FC = () => {
 
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
   const [gameStatus, setGameStatus] = useState<GameStatus>({
     state: GameState.START,
     score: 0,
@@ -28,7 +30,22 @@ export const App: React.FC = () => {
     fingerY: -1,
   });
 
-  // Mouse / Touch swipe fallback support
+  // Track last dispatched state for performance throttling
+  const lastDispatchedRef = useRef<{
+    state: GameState;
+    score: number;
+    lives: number;
+    combo: number;
+    lastThrottleTime: number;
+  }>({
+    state: GameState.START,
+    score: 0,
+    lives: 3,
+    combo: 0,
+    lastThrottleTime: 0,
+  });
+
+  // Mouse / Touch swipe fallback tracking
   const isMouseDownRef = useRef(false);
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -37,26 +54,35 @@ export const App: React.FC = () => {
     const engine = new GameEngine(640, 480);
     engineRef.current = engine;
 
+    // Handle mid-game camera disconnection gracefully
+    engine.ai.onDisconnect = () => {
+      setCameraReady(false);
+      setCameraError('Webcam disconnected. Touch/mouse slicing is still active.');
+    };
+
     return () => {
       engine.stop();
     };
   }, []);
 
   // Connect Camera & MediaPipe
-  const connectWebcam = useCallback(async () => {
-    if (!videoRef.current || !engineRef.current) return;
+  const connectWebcam = useCallback(async (): Promise<boolean> => {
+    if (!videoRef.current || !engineRef.current) return false;
     setIsLoadingCamera(true);
+    setCameraError(null);
 
-    const success = await engineRef.current.startWebcam(videoRef.current);
+    const result = await engineRef.current.startWebcam(videoRef.current);
     setIsLoadingCamera(false);
-    setCameraReady(success);
+    setCameraReady(result.success);
 
-    if (!success) {
-      console.warn('[App] Camera not detected. Mouse/Touch slicing enabled as fallback.');
+    if (!result.success) {
+      setCameraError(result.error || 'Camera connection failed.');
+      return false;
     }
+    return true;
   }, []);
 
-  // Start game action
+  // Start game action (from Start Screen)
   const handleStartGame = useCallback(async () => {
     if (!cameraReady && !isLoadingCamera) {
       await connectWebcam();
@@ -66,15 +92,32 @@ export const App: React.FC = () => {
     }
   }, [cameraReady, isLoadingCamera, connectWebcam]);
 
+  // Start game with mouse/touch directly without camera
+  const handlePlayWithMouse = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.restartGame();
+    }
+  }, []);
+
   const handleRestart = useCallback(() => {
     if (engineRef.current) {
       engineRef.current.restartGame();
     }
   }, []);
 
-  const handleResume = useCallback(() => {
+  const handlePause = useCallback(() => {
     if (engineRef.current) {
       engineRef.current.stateMgr.togglePause();
+    }
+  }, []);
+
+  const handleHome = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.stateMgr.state = GameState.START;
+      engineRef.current.timer.reset();
+      engineRef.current.scoreMgr.reset();
+      engineRef.current.livesMgr.reset();
+      engineRef.current.spawner.reset();
     }
   }, []);
 
@@ -83,7 +126,16 @@ export const App: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!engineRef.current) return;
 
-      const action = engineRef.current.handleKey(e.key);
+      const key = e.key;
+      const k = key.toLowerCase();
+
+      // Q or ESC in Game Over / Pause / Start acts as Home / Quit
+      if ((k === 'q' || key === 'Escape') && engineRef.current.stateMgr.state !== GameState.PLAYING) {
+        handleHome();
+        return;
+      }
+
+      const action = engineRef.current.handleKey(key);
       if (action === 'start' && !cameraReady) {
         handleStartGame();
       }
@@ -91,9 +143,9 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cameraReady, handleStartGame]);
+  }, [cameraReady, handleStartGame, handleHome]);
 
-  // Main Animation Frame Game Loop
+  // Main 60 FPS Canvas Game Loop
   useEffect(() => {
     let animId: number;
 
@@ -104,13 +156,30 @@ export const App: React.FC = () => {
       if (engine && canvas) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          // 1. Update Game Engine
+          // 1. Update Game Engine Physics & Logic
           const status = engine.update(timestamp);
-          setGameStatus(status);
 
           // 2. Render Canvas Game Elements
           const { motionData, trackingData } = engine.ai.tick(timestamp);
           engine.render(ctx, motionData, trackingData);
+
+          // 3. Throttled React state updates to avoid re-rendering React every frame
+          const last = lastDispatchedRef.current;
+          const nowMs = performance.now();
+          const stateChanged = last.state !== status.state;
+          const scoreChanged = last.score !== status.score;
+          const livesChanged = last.lives !== status.lives;
+          const comboChanged = last.combo !== status.combo;
+          const timeElapsed = nowMs - last.lastThrottleTime > 120; // 8-10 Hz for clock/FPS
+
+          if (stateChanged || scoreChanged || livesChanged || comboChanged || timeElapsed) {
+            setGameStatus(status);
+            last.state = status.state;
+            last.score = status.score;
+            last.lives = status.lives;
+            last.combo = status.combo;
+            last.lastThrottleTime = nowMs;
+          }
         }
       }
 
@@ -206,15 +275,17 @@ export const App: React.FC = () => {
 
         {/* Glassmorphism In-Game HUD */}
         {gameStatus.state === GameState.PLAYING && (
-          <HeaderHUD status={gameStatus} />
+          <HeaderHUD status={gameStatus} onPause={handlePause} />
         )}
 
         {/* Start / Home Screen Overlay */}
         {gameStatus.state === GameState.START && (
           <StartOverlay
             onStart={handleStartGame}
+            onPlayWithMouse={handlePlayWithMouse}
             isLoadingCamera={isLoadingCamera}
             cameraReady={cameraReady}
+            cameraError={cameraError}
           />
         )}
 
@@ -223,14 +294,16 @@ export const App: React.FC = () => {
           <GameOverModal
             status={gameStatus}
             onRestart={handleRestart}
+            onHome={handleHome}
           />
         )}
 
         {/* Pause Modal */}
         {gameStatus.state === GameState.PAUSED && (
           <PauseModal
-            onResume={handleResume}
+            onResume={handlePause}
             onRestart={handleRestart}
+            onHome={handleHome}
           />
         )}
 

@@ -1,11 +1,13 @@
+import React from 'react';
 import type { GameStatus } from '../../game/GameEngine';
 
 interface GameOverModalProps {
   status: GameStatus;
   onRestart: () => void;
+  onHome: () => void;
 }
 
-export const GameOverModal: React.FC<GameOverModalProps> = ({ status, onRestart }) => {
+export const GameOverModal: React.FC<GameOverModalProps> = ({ status, onRestart, onHome }) => {
   const { score, highScore } = status;
   const isNewBest = score >= highScore && score > 0;
 
@@ -31,8 +33,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ status, onRestart 
             <span className="btn-label">PLAY AGAIN</span>
           </button>
 
+          <button className="home-button" onClick={onHome}>
+            <span className="key-badge">Q</span>
+            <span className="btn-label">HOME MENU</span>
+          </button>
+
           <p className="shortcut-hint">
-            Press <strong>SPACE</strong> or <strong>R</strong> to Restart &bull; Press <strong>Q</strong> to Quit
+            Press <strong>SPACE</strong> or <strong>R</strong> to Restart &bull; Press <strong>Q</strong> for Home
           </p>
         </div>
       </div>
