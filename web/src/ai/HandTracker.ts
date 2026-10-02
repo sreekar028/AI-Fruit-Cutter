@@ -10,6 +10,11 @@
 
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
+const MEDIAPIPE_WASM_URL =
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
+const HAND_MODEL_URL =
+  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
 export interface HandLandmark {
   x: number;
   y: number;
@@ -27,7 +32,8 @@ export interface TrackingData {
 export class HandTracker {
   private handLandmarker: HandLandmarker | null = null;
   private isLoaded = false;
-  private isLoading = false;
+  private initialization: Promise<boolean> | null = null;
+  private initializationError: string | null = null;
   private width = 640;
   private height = 480;
 
@@ -41,21 +47,36 @@ export class HandTracker {
     this.height = height;
   }
 
-  public async initialize(): Promise<boolean> {
-    if (this.isLoaded) return true;
-    if (this.isLoading) return false;
+  public initialize(): Promise<boolean> {
+    if (this.isLoaded) return Promise.resolve(true);
+    if (this.initialization) return this.initialization;
 
-    this.isLoading = true;
+    this.initializationError = null;
+    this.initialization = this.createHandLandmarker()
+      .then((landmarker) => {
+        this.handLandmarker = landmarker;
+        this.isLoaded = true;
+        return true;
+      })
+      .catch((error: unknown) => {
+        this.initializationError = error instanceof Error ? error.message : String(error);
+        console.error('[HandTracker] Failed to initialize HandLandmarker:', error);
+        return false;
+      })
+      .finally(() => {
+        this.initialization = null;
+      });
+
+    return this.initialization;
+  }
+
+  private async createHandLandmarker(): Promise<HandLandmarker> {
+    const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
+
     try {
-      // Load MediaPipe WASM binaries from Google CDN
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-      );
-
-      this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      return await HandLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath:
-            'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+          modelAssetPath: HAND_MODEL_URL,
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
@@ -64,36 +85,24 @@ export class HandTracker {
         minHandPresenceConfidence: 0.6,
         minTrackingConfidence: 0.6,
       });
-
-      this.isLoaded = true;
-      this.isLoading = false;
-      return true;
-    } catch (err) {
-      console.warn('[HandTracker] Failed to load GPU delegate, trying CPU fallback...', err);
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-        );
-        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-            delegate: 'CPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.6,
-          minTrackingConfidence: 0.6,
-        });
-        this.isLoaded = true;
-        this.isLoading = false;
-        return true;
-      } catch (fallbackErr) {
-        console.error('[HandTracker] Failed to initialize HandLandmarker:', fallbackErr);
-        this.isLoading = false;
-        return false;
-      }
+    } catch (gpuError) {
+      console.warn('[HandTracker] GPU delegate unavailable; retrying with CPU.', gpuError);
+      return HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: HAND_MODEL_URL,
+          delegate: 'CPU',
+        },
+        runningMode: 'VIDEO',
+        numHands: 1,
+        minHandDetectionConfidence: 0.6,
+        minHandPresenceConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+      });
     }
+  }
+
+  public get initializationFailure(): string | null {
+    return this.initializationError;
   }
 
   public getTrackingData(video: HTMLVideoElement, timestampMs: number): TrackingData {
@@ -101,37 +110,33 @@ export class HandTracker {
       return this.emptyData();
     }
 
-    try {
-      const results = this.handLandmarker.detectForVideo(video, timestampMs);
+    const results = this.handLandmarker.detectForVideo(video, timestampMs);
 
-      if (!results.landmarks || results.landmarks.length === 0) {
-        return this.emptyData();
-      }
-
-      // First hand detected
-      const hand = results.landmarks[0];
-
-      // Convert normalized [0, 1] to mirrored pixel coordinates
-      // Index 8 = INDEX_FINGER_TIP
-      // Since video is mirrored for natural interaction, x is (1.0 - lm.x)
-      const landmarksPx: HandLandmark[] = hand.map((lm) => ({
-        x: Math.round((1.0 - lm.x) * this.width),
-        y: Math.round(lm.y * this.height),
-        z: lm.z,
-      }));
-
-      const indexTip = landmarksPx[8];
-
-      return {
-        handDetected: true,
-        fingerX: indexTip ? indexTip.x : -1,
-        fingerY: indexTip ? indexTip.y : -1,
-        landmarks: landmarksPx,
-        rawLandmarks: hand,
-      };
-    } catch {
+    if (!results.landmarks || results.landmarks.length === 0) {
       return this.emptyData();
     }
+
+    // First hand detected
+    const hand = results.landmarks[0];
+
+    // Convert normalized [0, 1] to mirrored pixel coordinates
+    // Index 8 = INDEX_FINGER_TIP
+    // Since video is mirrored for natural interaction, x is (1.0 - lm.x)
+    const landmarksPx: HandLandmark[] = hand.map((lm) => ({
+      x: Math.round((1.0 - lm.x) * this.width),
+      y: Math.round(lm.y * this.height),
+      z: lm.z,
+    }));
+
+    const indexTip = landmarksPx[8];
+
+    return {
+      handDetected: true,
+      fingerX: indexTip ? indexTip.x : -1,
+      fingerY: indexTip ? indexTip.y : -1,
+      landmarks: landmarksPx,
+      rawLandmarks: hand,
+    };
   }
 
   public drawLandmarks(ctx: CanvasRenderingContext2D, data: TrackingData) {
