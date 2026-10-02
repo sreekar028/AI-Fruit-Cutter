@@ -59,6 +59,10 @@ export const App: React.FC = () => {
       setCameraReady(false);
       setCameraError('Webcam disconnected. Touch/mouse slicing is still active.');
     };
+    engine.ai.onError = (message) => {
+      setCameraReady(false);
+      setCameraError(message);
+    };
 
     return () => {
       engine.stop();
@@ -84,8 +88,13 @@ export const App: React.FC = () => {
 
   // Start game action (from Start Screen)
   const handleStartGame = useCallback(async () => {
-    if (!cameraReady && !isLoadingCamera) {
-      await connectWebcam();
+    if (isLoadingCamera) return;
+    if (!cameraReady) {
+      const connected = await connectWebcam();
+      if (!connected) {
+        if (engineRef.current) engineRef.current.stateMgr.state = GameState.START;
+        return;
+      }
     }
     if (engineRef.current) {
       engineRef.current.restartGame();
@@ -157,11 +166,11 @@ export const App: React.FC = () => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           // 1. Update Game Engine Physics & Logic
-          const status = engine.update(timestamp);
+          const aiFrame = engine.ai.tick(timestamp);
+          const status = engine.update(timestamp, aiFrame);
 
           // 2. Render Canvas Game Elements
-          const { motionData, trackingData } = engine.ai.tick(timestamp);
-          engine.render(ctx, motionData, trackingData);
+          engine.render(ctx, aiFrame.motionData, aiFrame.trackingData);
 
           // 3. Throttled React state updates to avoid re-rendering React every frame
           const last = lastDispatchedRef.current;
@@ -272,6 +281,12 @@ export const App: React.FC = () => {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         />
+
+        {cameraError && gameStatus.state !== GameState.START && (
+          <div className="camera-error-banner camera-error-floating" role="alert">
+            {cameraError}
+          </div>
+        )}
 
         {/* Glassmorphism In-Game HUD */}
         {gameStatus.state === GameState.PLAYING && (

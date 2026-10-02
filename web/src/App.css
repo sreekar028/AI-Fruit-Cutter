@@ -579,6 +579,16 @@ body, html {
   text-align: left;
 }
 
+.camera-error-floating {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  z-index: 40;
+  width: min(540px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 .button-group-cta {
   display: flex;
   flex-direction: column;

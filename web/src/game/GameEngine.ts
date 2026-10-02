@@ -100,14 +100,17 @@ export class GameEngine {
     this.stateMgr.restartGame();
   }
 
-  public update(timestampMs: number): GameStatus {
+  public update(
+    timestampMs: number,
+    aiFrame = this.ai.tick(timestampMs)
+  ): GameStatus {
     const nowSec = timestampMs / 1000.0;
     const dt = this.lastTime > 0 ? (timestampMs - this.lastTime) / 1000.0 : 0.016;
     this.lastTime = timestampMs;
     this.fps = dt > 0 ? Math.round(1.0 / dt) : 60;
 
     // 1. AI Tracking
-    const { motionData } = this.ai.tick(timestampMs);
+    const { motionData } = aiFrame;
 
     // 2. Game Logic (only when in PLAYING state)
     if (this.stateMgr.isPlaying) {

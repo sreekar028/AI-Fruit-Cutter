@@ -27,8 +27,11 @@ export class AIController {
   private isRunning = false;
   private width = 640;
   private height = 480;
+  private startPromise: Promise<CameraInitResult> | null = null;
+  private startGeneration = 0;
 
   public onDisconnect?: () => void;
+  public onError?: (message: string) => void;
 
   constructor(width = 640, height = 480) {
     this.width = width;
@@ -37,7 +40,22 @@ export class AIController {
     this.detector = new MotionDetector();
   }
 
-  public async start(videoElement: HTMLVideoElement): Promise<CameraInitResult> {
+  public start(videoElement: HTMLVideoElement): Promise<CameraInitResult> {
+    if (this.isRunning) return Promise.resolve({ success: true });
+    if (this.startPromise) return this.startPromise;
+
+    const generation = ++this.startGeneration;
+    const attempt = this.initializeCamera(videoElement, generation);
+    this.startPromise = attempt;
+    return attempt.finally(() => {
+      if (this.startPromise === attempt) this.startPromise = null;
+    });
+  }
+
+  private async initializeCamera(
+    videoElement: HTMLVideoElement,
+    generation: number
+  ): Promise<CameraInitResult> {
     this.video = videoElement;
 
     // Check if getUserMedia is supported in browser
@@ -58,6 +76,12 @@ export class AIController {
         audio: false,
       });
 
+      if (generation !== this.startGeneration) {
+        this.stream.getTracks().forEach((track) => track.stop());
+        this.stream = null;
+        return { success: false, error: 'Camera setup was cancelled.' };
+      }
+
       this.video.srcObject = this.stream;
       this.video.setAttribute('playsinline', 'true');
       this.video.muted = true;
@@ -73,13 +97,28 @@ export class AIController {
       }
 
       await this.video.play();
+      await this.waitForVideoReady(this.video);
+
+      if (generation !== this.startGeneration) {
+        this.stop();
+        return { success: false, error: 'Camera setup was cancelled.' };
+      }
 
       const modelReady = await this.tracker.initialize();
       if (!modelReady) {
+        const detail = this.tracker.initializationFailure;
+        this.stop();
         return {
           success: false,
-          error: 'Failed to initialize MediaPipe Hand Landmarker model.',
+          error: detail
+            ? `MediaPipe initialization failed: ${detail}`
+            : 'MediaPipe could not initialize. Check access to its model and WASM resources.',
         };
+      }
+
+      if (generation !== this.startGeneration) {
+        this.stop();
+        return { success: false, error: 'Camera setup was cancelled.' };
       }
 
       this.isRunning = true;
@@ -98,9 +137,45 @@ export class AIController {
         errorMsg = err.message;
       }
 
-      this.isRunning = false;
+      if (generation === this.startGeneration) this.stop();
       return { success: false, error: errorMsg };
     }
+  }
+
+  private waitForVideoReady(video: HTMLVideoElement): Promise<void> {
+    const hasFrame = () =>
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      video.videoWidth > 0 &&
+      video.videoHeight > 0;
+
+    if (hasFrame()) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        window.clearTimeout(timeoutId);
+        video.removeEventListener('loadeddata', checkReady);
+        video.removeEventListener('loadedmetadata', checkReady);
+        video.removeEventListener('error', handleError);
+      };
+      const checkReady = () => {
+        if (!hasFrame()) return;
+        cleanup();
+        resolve();
+      };
+      const handleError = () => {
+        cleanup();
+        reject(new Error('The webcam opened but did not provide video frames.'));
+      };
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('Timed out waiting for webcam video to become ready.'));
+      }, 10000);
+
+      video.addEventListener('loadeddata', checkReady);
+      video.addEventListener('loadedmetadata', checkReady);
+      video.addEventListener('error', handleError, { once: true });
+      checkReady();
+    });
   }
 
   public setDimensions(width: number, height: number) {
@@ -110,22 +185,42 @@ export class AIController {
   }
 
   public tick(timestampMs: number): { motionData: MotionData; trackingData: TrackingData } {
-    if (!this.isRunning || !this.video || this.video.readyState < 2) {
-      const emptyTracking: TrackingData = {
-        handDetected: false,
-        fingerX: -1,
-        fingerY: -1,
-        landmarks: [],
-        rawLandmarks: null,
-      };
+    if (
+      !this.isRunning ||
+      !this.video ||
+      this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      this.video.videoWidth === 0 ||
+      this.video.videoHeight === 0
+    ) {
+      const emptyTracking = this.emptyTrackingData();
       const motionData = this.detector.update(emptyTracking);
       return { motionData, trackingData: emptyTracking };
     }
 
-    const trackingData = this.tracker.getTrackingData(this.video, timestampMs);
-    const motionData = this.detector.update(trackingData);
+    try {
+      const trackingData = this.tracker.getTrackingData(this.video, timestampMs);
+      const motionData = this.detector.update(trackingData);
 
-    return { motionData, trackingData };
+      return { motionData, trackingData };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error('[AIController] Hand detection stopped:', error);
+      this.stop();
+      const emptyTracking = this.emptyTrackingData();
+      const motionData = this.detector.update(emptyTracking);
+      this.onError?.(`Hand detection stopped: ${detail}`);
+      return { motionData, trackingData: emptyTracking };
+    }
+  }
+
+  private emptyTrackingData(): TrackingData {
+    return {
+      handDetected: false,
+      fingerX: -1,
+      fingerY: -1,
+      landmarks: [],
+      rawLandmarks: null,
+    };
   }
 
   public drawLandmarks(ctx: CanvasRenderingContext2D, trackingData: TrackingData) {
@@ -137,15 +232,18 @@ export class AIController {
   }
 
   public stop() {
+    this.startGeneration += 1;
     this.isRunning = false;
     if (this.stream) {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
     }
     if (this.video) {
+      this.video.pause();
       this.video.srcObject = null;
     }
     this.tracker.release();
+    this.detector.reset();
   }
 
   public get running(): boolean {
