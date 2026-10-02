@@ -137,8 +137,8 @@ A **cutting/slashing** gesture is detected when **both** conditions are met in a
 
 | Condition | Default threshold |
 |-----------|-----------------|
-| `movement_speed` ≥ | **0.4 px/ms** |
-| `movement_distance` ≥ | **25 px** |
+| `movement_speed` ≥ | **0.2 px/ms** |
+| `movement_distance` ≥ | **10 px** |
 
 Both thresholds are configurable via `AIController` constructor parameters:
 

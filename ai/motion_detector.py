@@ -39,8 +39,8 @@ from collections import deque
 # Tuneable constants
 # ---------------------------------------------------------------------------
 TRAJECTORY_MAX_LEN   = 20      # How many recent points to keep
-CUT_SPEED_THRESHOLD  = 0.4     # px/ms  — minimum speed to count as a cut
-CUT_DISTANCE_MIN     = 25      # px     — minimum single-frame movement for a cut
+CUT_SPEED_THRESHOLD  = 0.2     # px/ms  — minimum speed to count as a cut
+CUT_DISTANCE_MIN     = 10      # px     — minimum single-frame movement for a cut
 HAND_LOST_RESET_SEC  = 0.5     # seconds without a hand before trajectory resets
 
 
@@ -106,6 +106,8 @@ class MotionDetector:
         fx = tracking_data["finger_x"]
         fy = tracking_data["finger_y"]
         self._last_seen = now
+        previous_x = self._prev_x
+        previous_y = self._prev_y
 
         # --- Compute movement ---
         if self._prev_x == -1:
@@ -141,6 +143,7 @@ class MotionDetector:
         return self._build_output(
             hand_detected=True,
             fx=fx, fy=fy,
+            previous_x=previous_x, previous_y=previous_y,
             distance=distance,
             speed=speed,
             direction=direction,
@@ -161,14 +164,15 @@ class MotionDetector:
 
     def _build_output(
         self, *, hand_detected, fx, fy,
+        previous_x=-1, previous_y=-1,
         distance, speed, direction, is_cutting
     ) -> dict:
         return {
             "hand_detected":      hand_detected,
             "finger_x":           fx,
             "finger_y":           fy,
-            "previous_x":         self._prev_x if hand_detected else -1,
-            "previous_y":         self._prev_y if hand_detected else -1,
+            "previous_x":         previous_x if hand_detected else -1,
+            "previous_y":         previous_y if hand_detected else -1,
             "movement_distance":  round(distance, 2),
             "movement_speed":     round(speed, 4),
             "movement_direction": round(direction, 2),

@@ -17,6 +17,8 @@ Tests:
 
 import time
 import unittest
+from unittest.mock import patch
+from ai.motion_detector import MotionDetector
 from game.fruit import Fruit, FruitHalf, FRUIT_TYPES
 from game.spawner import FruitSpawner
 from game.collision import CollisionDetector
@@ -25,6 +27,23 @@ from game.lives_manager import LivesManager
 from game.timer import GameTimer
 from game.game_state import GameState, GameStateManager
 from game.game_engine import GameEngine
+
+
+class TestMotionDetector(unittest.TestCase):
+    """Test fingertip movement and cut gesture output."""
+
+    def test_cut_reports_previous_position_and_detects_slash(self):
+        detector = MotionDetector()
+        tracking_data = {"hand_detected": True, "finger_x": 100, "finger_y": 100}
+
+        with patch("ai.motion_detector.time.time", side_effect=[1.0, 1.05]):
+            detector.update(tracking_data)
+            tracking_data.update(finger_x=115, finger_y=100)
+            motion = detector.update(tracking_data)
+
+        self.assertEqual((motion["previous_x"], motion["previous_y"]), (100, 100))
+        self.assertEqual((motion["finger_x"], motion["finger_y"]), (115, 100))
+        self.assertTrue(motion["is_cutting"])
 
 
 class TestFruitSystem(unittest.TestCase):

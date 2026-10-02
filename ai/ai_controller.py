@@ -70,8 +70,8 @@ class AIController:
         mirror:           bool  = True,
         detection_conf:   float = 0.7,
         tracking_conf:    float = 0.6,
-        cut_speed_px_ms:  float = 0.4,
-        cut_distance_min: float = 25.0,
+        cut_speed_px_ms:  float = 0.2,
+        cut_distance_min: float = 10.0,
         trajectory_len:   int   = 20,
     ):
         self._camera_index  = camera_index
