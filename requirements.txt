@@ -3,7 +3,8 @@
 
 # Core AI / Computer Vision
 opencv-python>=4.8.0
-mediapipe>=0.10.0
+# The tracker uses MediaPipe's Solutions Hands API.
+mediapipe>=0.10.0,<0.10.30
 numpy>=1.24.0
 
 # Game Engine (for other modules)

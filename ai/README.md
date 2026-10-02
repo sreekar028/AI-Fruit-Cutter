@@ -46,8 +46,10 @@ motion_data dict → Game Module
 | Library | Version | Purpose |
 |---------|---------|---------|
 | `opencv-python` | ≥ 4.8 | Webcam capture, frame processing |
-| `mediapipe` | ≥ 0.10 | 21-point hand landmark detection |
+| `mediapipe` | `<0.10.30` | 21-point hand landmark detection |
 | `numpy` | ≥ 1.24 | Numerical arrays, frame manipulation |
+
+The hand tracker uses MediaPipe's Solutions Hands API; install dependencies with Python 3.11 and `mediapipe<0.10.30`.
 
 ---
 

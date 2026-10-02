@@ -79,7 +79,7 @@ class HandTracker:
     def __init__(
         self,
         max_hands: int = 1,
-        detection_confidence: float = 0.7,
+        detection_confidence: float = 0.5,
         tracking_confidence: float = 0.6,
     ):
         self._mp_hands = mp.solutions.hands

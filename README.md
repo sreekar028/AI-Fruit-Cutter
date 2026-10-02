@@ -46,7 +46,7 @@ AI-Fruit-Cutter/
 
 ## 🛠️ Technologies
 
-- **Python 3.9+**
+- **Python 3.11** (recommended for the current MediaPipe hand tracker)
 - **OpenCV** — webcam capture and image processing
 - **MediaPipe** — real-time hand landmark detection
 - **NumPy** — numerical computation for motion tracking
