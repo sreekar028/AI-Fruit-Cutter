@@ -119,14 +119,29 @@ export class HandTracker {
     // First hand detected
     const hand = results.landmarks[0];
 
-    // Convert normalized [0, 1] to mirrored pixel coordinates
-    // Index 8 = INDEX_FINGER_TIP
-    // Since video is mirrored for natural interaction, x is (1.0 - lm.x)
-    const landmarksPx: HandLandmark[] = hand.map((lm) => ({
-      x: Math.round((1.0 - lm.x) * this.width),
-      y: Math.round(lm.y * this.height),
-      z: lm.z,
-    }));
+    const videoRect = video.getBoundingClientRect();
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+    const objectFit = window.getComputedStyle(video).objectFit;
+    const scale = objectFit === 'cover'
+      ? Math.max(videoRect.width / videoWidth, videoRect.height / videoHeight)
+      : objectFit === 'contain'
+        ? Math.min(videoRect.width / videoWidth, videoRect.height / videoHeight)
+        : 0;
+    const renderedWidth = scale ? videoWidth * scale : videoRect.width;
+    const renderedHeight = scale ? videoHeight * scale : videoRect.height;
+    const cropX = (renderedWidth - videoRect.width) / 2;
+    const cropY = (renderedHeight - videoRect.height) / 2;
+    const transform = new DOMMatrixReadOnly(window.getComputedStyle(video).transform);
+    const mirrored = transform.a < 0;
+
+    // Map raw video landmarks through object-fit cropping and the visible mirror.
+    const landmarksPx: HandLandmark[] = hand.map((lm) => {
+      let x = (lm.x * renderedWidth - cropX) * (this.width / videoRect.width);
+      const y = (lm.y * renderedHeight - cropY) * (this.height / videoRect.height);
+      if (mirrored) x = this.width - x;
+      return { x: Math.round(x), y: Math.round(y), z: lm.z };
+    });
 
     const indexTip = landmarksPx[8];
 

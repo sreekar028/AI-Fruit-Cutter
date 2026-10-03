@@ -121,6 +121,9 @@ export class FruitSpawner {
     const availableWidth = Math.max(100, this.boundsWidth - 2 * marginX);
     const slotWidth = availableWidth / Math.max(1, count);
     const speedMultiplier = this.difficulty.fruitSpeedMultiplier;
+    const hardSpeedMultiplier = getDifficultyConfig('hard').fruitSpeedMultiplier;
+    const verticalSpeedScale = speedMultiplier / hardSpeedMultiplier;
+    const hardGravity = 0.38 * (1 + (hardSpeedMultiplier - 1) * 0.2);
 
     for (let i = 0; i < count; i++) {
       const slotMin = marginX + Math.round(i * slotWidth);
@@ -142,14 +145,25 @@ export class FruitSpawner {
         fType = this.edibleTypes[idx];
       }
 
-      const vy = -(15.2 * speedMultiplier + Math.random() * 2.8 * speedMultiplier);
+      const hardLaunchSpeed =
+        15.2 * hardSpeedMultiplier + Math.random() * 2.8 * hardSpeedMultiplier;
+      const vy = -hardLaunchSpeed * verticalSpeedScale;
       const centerX = this.boundsWidth / 2.0;
       const distFromCenter = (centerX - spawnX) / (this.boundsWidth / 2.0);
       const vx =
         distFromCenter * (1.8 * speedMultiplier + Math.random() * 2.0 * speedMultiplier) +
         (Math.random() - 0.5);
 
-      const fruit = new Fruit(fType, spawnX, spawnY, vx, vy, 0.38 * (1 + (speedMultiplier - 1) * 0.2));
+      const hardFlightSteps = Math.ceil(hardLaunchSpeed / hardGravity);
+      const hardApex =
+        hardFlightSteps * hardLaunchSpeed -
+        (hardGravity * hardFlightSteps * (hardFlightSteps - 1)) / 2;
+      const flightSteps = Math.max(2, Math.round(hardFlightSteps / verticalSpeedScale));
+      const gravity = verticalSpeedScale === 1
+        ? hardGravity
+        : (2 * (flightSteps * hardLaunchSpeed * verticalSpeedScale - hardApex)) /
+          (flightSteps * (flightSteps - 1));
+      const fruit = new Fruit(fType, spawnX, spawnY, vx, vy, gravity);
       wave.push(fruit);
     }
 
