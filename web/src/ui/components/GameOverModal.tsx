@@ -1,13 +1,15 @@
 import React from 'react';
 import type { GameStatus } from '../../game/GameEngine';
+import type { GameMode } from '../../game/Difficulty';
 
 interface GameOverModalProps {
   status: GameStatus;
+  selectedMode: GameMode;
   onRestart: () => void;
   onHome: () => void;
 }
 
-export const GameOverModal: React.FC<GameOverModalProps> = ({ status, onRestart, onHome }) => {
+export const GameOverModal: React.FC<GameOverModalProps> = ({ status, selectedMode, onRestart, onHome }) => {
   const { score, highScore } = status;
   const isNewBest = score >= highScore && score > 0;
 
@@ -19,6 +21,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ status, onRestart,
         <div className="score-summary-card">
           <span className="summary-label">FINAL SCORE</span>
           <span className="summary-score">{score}</span>
+          <span className="summary-mode">MODE: {selectedMode.toUpperCase()}</span>
 
           {isNewBest ? (
             <div className="new-record-pill">★ NEW BEST RECORD! ★</div>

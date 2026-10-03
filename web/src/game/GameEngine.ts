@@ -23,6 +23,7 @@ import { LivesManager } from './LivesManager';
 import { GameTimer } from './Timer';
 import { GameState, GameStateManager } from './GameState';
 import { EffectsManager } from './Effects';
+import { type GameMode, getDifficultyConfig } from './Difficulty';
 
 export interface GameStatus {
   state: GameState;
@@ -49,6 +50,7 @@ export class GameEngine {
   public timer: GameTimer;
   public stateMgr: GameStateManager;
   public effects: EffectsManager;
+  public difficulty: GameMode;
 
   private fps = 60;
   private lastTime = 0;
@@ -61,15 +63,21 @@ export class GameEngine {
   constructor(width = 640, height = 480) {
     this.width = width;
     this.height = height;
+    this.difficulty = 'medium';
 
     this.ai = new AIController(width, height);
-    this.spawner = new FruitSpawner(width, height);
+    this.spawner = new FruitSpawner(width, height, getDifficultyConfig(this.difficulty));
     this.collision = new CollisionDetector(14.0);
     this.scoreMgr = new ScoreManager(0.50);
     this.livesMgr = new LivesManager(3, 1);
     this.timer = new GameTimer();
     this.stateMgr = new GameStateManager(GameState.START);
     this.effects = new EffectsManager();
+  }
+
+  public setDifficulty(mode: GameMode) {
+    this.difficulty = mode;
+    this.spawner.setDifficulty(getDifficultyConfig(mode));
   }
 
   public setDimensions(width: number, height: number) {
