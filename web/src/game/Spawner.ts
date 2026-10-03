@@ -11,6 +11,7 @@
  */
 
 import { Fruit, FRUIT_TYPES } from './Fruit';
+import { type DifficultyConfig, getDifficultyConfig } from './Difficulty';
 
 export class FruitSpawner {
   public boundsWidth: number;
@@ -18,6 +19,7 @@ export class FruitSpawner {
   public baseInterval: number;
   public minInterval: number;
   public bombChance: number;
+  public difficulty: DifficultyConfig;
 
   private lastSpawnTime = 0;
   private currentInterval: number;
@@ -27,15 +29,15 @@ export class FruitSpawner {
   constructor(
     boundsWidth = 640,
     boundsHeight = 480,
-    baseInterval = 2.0,
-    bombChance = 0.18
+    difficulty: DifficultyConfig = getDifficultyConfig('medium')
   ) {
     this.boundsWidth = boundsWidth;
     this.boundsHeight = boundsHeight;
-    this.baseInterval = baseInterval;
-    this.minInterval = 1.0;
-    this.bombChance = bombChance;
-    this.currentInterval = baseInterval;
+    this.difficulty = difficulty;
+    this.baseInterval = difficulty.spawnInterval;
+    this.minInterval = difficulty.minInterval;
+    this.bombChance = difficulty.bombChance;
+    this.currentInterval = difficulty.spawnInterval;
 
     this.edibleTypes = Object.keys(FRUIT_TYPES).filter((t) => t !== 'bomb');
   }
@@ -43,6 +45,14 @@ export class FruitSpawner {
   public setDimensions(width: number, height: number) {
     this.boundsWidth = width;
     this.boundsHeight = height;
+  }
+
+  public setDifficulty(difficulty: DifficultyConfig) {
+    this.difficulty = difficulty;
+    this.baseInterval = difficulty.spawnInterval;
+    this.minInterval = difficulty.minInterval;
+    this.bombChance = difficulty.bombChance;
+    this.currentInterval = difficulty.spawnInterval;
   }
 
   public update(currentTimeSec: number, currentScore: number): Fruit[] {
@@ -97,10 +107,12 @@ export class FruitSpawner {
     if (currentScore < 30) {
       count = Math.random() < 0.65 ? 1 : 2;
     } else if (currentScore < 80) {
-      count = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+      count = Math.floor(Math.random() * 3) + 1;
     } else {
       count = Math.random() < 0.4 ? 2 : 3;
     }
+
+    count = Math.min(count, this.difficulty.maxConcurrentFruits);
 
     const wave: Fruit[] = [];
     let bombSpawned = false;
@@ -108,6 +120,7 @@ export class FruitSpawner {
     const marginX = 90;
     const availableWidth = Math.max(100, this.boundsWidth - 2 * marginX);
     const slotWidth = availableWidth / Math.max(1, count);
+    const speedMultiplier = this.difficulty.fruitSpeedMultiplier;
 
     for (let i = 0; i < count; i++) {
       const slotMin = marginX + Math.round(i * slotWidth);
@@ -129,13 +142,14 @@ export class FruitSpawner {
         fType = this.edibleTypes[idx];
       }
 
-      // Parabolic arc velocities
-      const vy = -(15.2 + Math.random() * 2.8);
+      const vy = -(15.2 * speedMultiplier + Math.random() * 2.8 * speedMultiplier);
       const centerX = this.boundsWidth / 2.0;
       const distFromCenter = (centerX - spawnX) / (this.boundsWidth / 2.0);
-      const vx = distFromCenter * (1.8 + Math.random() * 2.0) + (Math.random() - 0.5);
+      const vx =
+        distFromCenter * (1.8 * speedMultiplier + Math.random() * 2.0 * speedMultiplier) +
+        (Math.random() - 0.5);
 
-      const fruit = new Fruit(fType, spawnX, spawnY, vx, vy, 0.38);
+      const fruit = new Fruit(fType, spawnX, spawnY, vx, vy, 0.38 * (1 + (speedMultiplier - 1) * 0.2));
       wave.push(fruit);
     }
 

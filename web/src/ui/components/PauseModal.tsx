@@ -1,16 +1,19 @@
 import React from 'react';
+import type { GameMode } from '../../game/Difficulty';
 
 interface PauseModalProps {
+  selectedMode: GameMode;
   onResume: () => void;
   onRestart: () => void;
   onHome: () => void;
 }
 
-export const PauseModal: React.FC<PauseModalProps> = ({ onResume, onRestart, onHome }) => {
+export const PauseModal: React.FC<PauseModalProps> = ({ selectedMode, onResume, onRestart, onHome }) => {
   return (
     <div className="overlay-backdrop">
       <div className="pause-modal glass-panel">
         <h2 className="pause-title">GAME PAUSED</h2>
+        <div className="pause-mode-pill">MODE: {selectedMode.toUpperCase()}</div>
 
         <div className="pause-actions">
           <button className="pause-btn primary" onClick={onResume}>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GameEngine, type GameStatus } from './game/GameEngine';
 import { GameState } from './game/GameState';
+import { GAME_MODES, type GameMode } from './game/Difficulty';
 import { HeaderHUD } from './ui/components/HeaderHUD';
 import { StartOverlay } from './ui/components/StartOverlay';
 import { GameOverModal } from './ui/components/GameOverModal';
@@ -12,6 +13,7 @@ export const App: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<GameEngine | null>(null);
+  const [selectedMode, setSelectedMode] = useState<GameMode>(GAME_MODES.MEDIUM);
 
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -51,7 +53,7 @@ export const App: React.FC = () => {
 
   // Initialize GameEngine
   useEffect(() => {
-    const engine = new GameEngine(640, 480);
+    const engine = new GameEngine(960, 720);
     engineRef.current = engine;
 
     // Handle mid-game camera disconnection gracefully
@@ -68,6 +70,48 @@ export const App: React.FC = () => {
       engine.stop();
     };
   }, []);
+
+  const syncCanvasToStage = useCallback(() => {
+    const engine = engineRef.current;
+    const canvas = canvasRef.current;
+    const stage = canvas?.parentElement;
+    if (!engine || !canvas || !stage) return;
+
+    const rect = stage.getBoundingClientRect();
+    const width = Math.max(320, Math.round(rect.width));
+    const height = Math.max(240, Math.round(rect.height));
+
+    engine.setDimensions(width, height);
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+  }, []);
+
+  useEffect(() => {
+    const stage = document.querySelector('.game-stage');
+    if (!stage) return;
+
+    syncCanvasToStage();
+
+    const observer = new ResizeObserver(() => {
+      syncCanvasToStage();
+    });
+
+    observer.observe(stage);
+    window.addEventListener('resize', syncCanvasToStage);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', syncCanvasToStage);
+    };
+  }, [syncCanvasToStage]);
+
+  useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.setDifficulty(selectedMode);
+    }
+  }, [selectedMode]);
 
   // Connect Camera & MediaPipe
   const connectWebcam = useCallback(async (): Promise<boolean> => {
@@ -203,16 +247,16 @@ export const App: React.FC = () => {
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     isMouseDownRef.current = true;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 640;
-    const y = ((e.clientY - rect.top) / rect.height) * 480;
+    const x = ((e.clientX - rect.left) / rect.width) * (engineRef.current?.width ?? rect.width);
+    const y = ((e.clientY - rect.top) / rect.height) * (engineRef.current?.height ?? rect.height);
     lastMousePosRef.current = { x, y };
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isMouseDownRef.current || !engineRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 640;
-    const y = ((e.clientY - rect.top) / rect.height) * 480;
+    const x = ((e.clientX - rect.left) / rect.width) * (engineRef.current?.width ?? rect.width);
+    const y = ((e.clientY - rect.top) / rect.height) * (engineRef.current?.height ?? rect.height);
 
     const prev = lastMousePosRef.current || { x, y };
     const dx = x - prev.x;
@@ -275,8 +319,8 @@ export const App: React.FC = () => {
         <canvas
           ref={canvasRef}
           className="game-canvas"
-          width={640}
-          height={480}
+          width={960}
+          height={720}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -290,7 +334,7 @@ export const App: React.FC = () => {
 
         {/* Glassmorphism In-Game HUD */}
         {gameStatus.state === GameState.PLAYING && (
-          <HeaderHUD status={gameStatus} onPause={handlePause} />
+          <HeaderHUD status={gameStatus} mode={selectedMode} onPause={handlePause} />
         )}
 
         {/* Start / Home Screen Overlay */}
@@ -301,6 +345,8 @@ export const App: React.FC = () => {
             isLoadingCamera={isLoadingCamera}
             cameraReady={cameraReady}
             cameraError={cameraError}
+            selectedMode={selectedMode}
+            onModeSelect={setSelectedMode}
           />
         )}
 
@@ -308,6 +354,7 @@ export const App: React.FC = () => {
         {gameStatus.state === GameState.GAME_OVER && (
           <GameOverModal
             status={gameStatus}
+            selectedMode={selectedMode}
             onRestart={handleRestart}
             onHome={handleHome}
           />
@@ -316,6 +363,7 @@ export const App: React.FC = () => {
         {/* Pause Modal */}
         {gameStatus.state === GameState.PAUSED && (
           <PauseModal
+            selectedMode={selectedMode}
             onResume={handlePause}
             onRestart={handleRestart}
             onHome={handleHome}

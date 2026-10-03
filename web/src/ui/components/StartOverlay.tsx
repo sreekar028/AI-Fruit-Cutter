@@ -1,4 +1,5 @@
 import React from 'react';
+import { GAME_MODES, type GameMode, getDifficultyConfig } from '../../game/Difficulty';
 
 interface StartOverlayProps {
   onStart: () => void;
@@ -6,6 +7,8 @@ interface StartOverlayProps {
   isLoadingCamera: boolean;
   cameraReady: boolean;
   cameraError: string | null;
+  selectedMode: GameMode;
+  onModeSelect: (mode: GameMode) => void;
 }
 
 export const StartOverlay: React.FC<StartOverlayProps> = ({
@@ -14,6 +17,8 @@ export const StartOverlay: React.FC<StartOverlayProps> = ({
   isLoadingCamera,
   cameraReady,
   cameraError,
+  selectedMode,
+  onModeSelect,
 }) => {
   return (
     <div className="overlay-backdrop">
@@ -21,6 +26,28 @@ export const StartOverlay: React.FC<StartOverlayProps> = ({
         <div className="hero-header">
           <h1 className="game-title">AI-BASED FRUIT CUTTER</h1>
           <p className="game-subtitle">Real-Time Hand Motion Detection</p>
+        </div>
+
+        <div className="mode-picker">
+          <span className="section-title">GAME MODE</span>
+          <div className="mode-buttons">
+            {Object.values(GAME_MODES).map((mode) => {
+              const config = getDifficultyConfig(mode);
+              const active = selectedMode === mode;
+
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`mode-button ${active ? 'active' : ''}`}
+                  onClick={() => onModeSelect(mode)}
+                >
+                  <span className="mode-button-label">{config.label}</span>
+                  <span className="mode-button-meta">{config.fruitSpeedMultiplier >= 1.3 ? 'FAST' : config.fruitSpeedMultiplier > 0.9 ? 'MEDIUM' : 'SLOW'}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="instructions-card">
