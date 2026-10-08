@@ -10,7 +10,7 @@
  * - Bomb hazard probabilities (active after score >= 20)
  */
 
-import { Fruit, FRUIT_TYPES } from './Fruit';
+import { Fruit, FRUIT_TYPES, type FruitType } from './Fruit';
 import { type DifficultyConfig, getDifficultyConfig } from './Difficulty';
 
 export class FruitSpawner {
@@ -24,7 +24,8 @@ export class FruitSpawner {
   private lastSpawnTime = 0;
   private currentInterval: number;
   private activeFruits: Fruit[] = [];
-  private edibleTypes: string[];
+  private edibleTypes: FruitType[];
+  private lastFruitType: FruitType | null = null;
 
   constructor(
     boundsWidth = 640,
@@ -39,7 +40,9 @@ export class FruitSpawner {
     this.bombChance = difficulty.bombChance;
     this.currentInterval = difficulty.spawnInterval;
 
-    this.edibleTypes = Object.keys(FRUIT_TYPES).filter((t) => t !== 'bomb');
+    this.edibleTypes = Object.keys(FRUIT_TYPES).filter(
+      (type): type is FruitType => type !== 'bomb'
+    );
   }
 
   public setDimensions(width: number, height: number) {
@@ -100,6 +103,7 @@ export class FruitSpawner {
     this.lastSpawnTime = performance.now() / 1000.0;
     this.currentInterval = this.baseInterval;
     this.activeFruits = [];
+    this.lastFruitType = null;
   }
 
   private spawnWave(currentScore: number): Fruit[] {
@@ -136,13 +140,14 @@ export class FruitSpawner {
         currentScore >= 20 &&
         Math.random() < this.bombChance;
 
-      let fType: string;
+      let fType: FruitType;
       if (shouldSpawnBomb) {
         fType = 'bomb';
         bombSpawned = true;
       } else {
-        const idx = Math.floor(Math.random() * this.edibleTypes.length);
-        fType = this.edibleTypes[idx];
+        const availableTypes = this.edibleTypes.filter((type) => type !== this.lastFruitType);
+        fType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+        this.lastFruitType = fType;
       }
 
       const hardLaunchSpeed =
