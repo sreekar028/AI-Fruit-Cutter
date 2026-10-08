@@ -61,7 +61,7 @@ web/
 │   │   ├── MotionDetector.ts# Velocity, trajectory buffer, slash gestures
 │   │   └── AIController.ts  # Browser webcam getUserMedia coordinator
 │   ├── game/
-│   │   ├── Fruit.ts         # 6 fruit types, parabolic physics, split halves
+│   │   ├── Fruit.ts         # 12 detailed fruit types, physics, fading cut halves
 │   │   ├── Spawner.ts       # Wave generation, launch angles, difficulty curve
 │   │   ├── Collision.ts     # Line-segment to circle distance testing
 │   │   ├── ScoreManager.ts  # Multi-fruit combos, base scores, localStorage
@@ -160,7 +160,10 @@ npm run build
 
 ## 13. Game Architecture
 - **Fruit Physics:** Parabolic gravity arcs ($g = 0.38$) launching fruits upward from the bottom of the screen.
-- **Fruit Types:** Watermelon (10 pts), Apple (15 pts), Banana (20 pts), Orange (10 pts), Strawberry (25 pts), Bomb (detonates, -1 Life, resets combo).
+- **Fruit Types:** Apple, Banana, Orange, Watermelon, Pineapple, Strawberry, Mango, Grapes, Kiwi, Peach, Lemon, and Coconut. Each has its own silhouette, skin colors, shading, and surface details; fruit sizes vary while keeping collision targets practical.
+- **Fruit Cuts:** Slices separate into two rotating, fading pieces with a visible flesh-colored cut face and fruit-specific seeds where appropriate.
+- **Fruit Variety:** Spawns avoid repeating the same edible fruit consecutively. Rotation direction and speed are randomized independently for each fruit.
+- **Scoring:** Fruit points vary by type; Bombs detonate, cost 1 Life, and reset combo.
 - **Combos:** Slicing multiple fruits within $0.50\text{s}$ awards combo bonuses (2x: +5, 3x: +10, 4x+: +20).
 - **Lives:** 3 strikes. A fruit falling below the bottom border unsliced deducts 1 life.
 - **Controls:**
