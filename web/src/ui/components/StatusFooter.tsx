@@ -12,7 +12,7 @@ export const StatusFooter: React.FC<StatusFooterProps> = ({ handDetected, fps })
         <div className={`status-pill ${handDetected ? 'active' : 'searching'}`}>
           <span className="status-dot"></span>
           <span className="status-text">
-            {handDetected ? 'HAND ACTIVE' : 'SEARCHING HAND...'}
+            {handDetected ? 'KATANA READY' : 'SEARCHING HAND...'}
           </span>
           {fps > 0 && <span className="fps-counter">{fps} FPS</span>}
         </div>

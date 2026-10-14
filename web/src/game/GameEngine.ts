@@ -5,6 +5,8 @@
  * 
  * Master coordinator uniting:
  * - AIController (Member 1 MediaPipe webcam tracking)
+ * - BackgroundManager (Interactive ambient fruit-dojo background)
+ * - KatanaCutter (Mini-katana cutter following index fingertip)
  * - FruitSpawner (wave-based parabolic arc fruit launches)
  * - CollisionDetector (continuous segment-to-circle testing)
  * - ScoreManager (fruit scores & combos)
@@ -24,6 +26,8 @@ import { GameTimer } from './Timer';
 import { GameState, GameStateManager } from './GameState';
 import { EffectsManager } from './Effects';
 import { type GameMode, getDifficultyConfig } from './Difficulty';
+import { BackgroundManager } from './Background';
+import { KatanaCutter } from './Katana';
 
 export interface GameStatus {
   state: GameState;
@@ -43,6 +47,8 @@ export class GameEngine {
   public height: number;
 
   public ai: AIController;
+  public background: BackgroundManager;
+  public katana: KatanaCutter;
   public spawner: FruitSpawner;
   public collision: CollisionDetector;
   public scoreMgr: ScoreManager;
@@ -66,6 +72,8 @@ export class GameEngine {
     this.difficulty = 'medium';
 
     this.ai = new AIController(width, height);
+    this.background = new BackgroundManager(width, height);
+    this.katana = new KatanaCutter();
     this.spawner = new FruitSpawner(width, height, getDifficultyConfig(this.difficulty));
     this.collision = new CollisionDetector(14.0);
     this.scoreMgr = new ScoreManager(0.50);
@@ -84,6 +92,7 @@ export class GameEngine {
     this.width = width;
     this.height = height;
     this.ai.setDimensions(width, height);
+    this.background.setDimensions(width, height);
     this.spawner.setDimensions(width, height);
   }
 
@@ -120,7 +129,21 @@ export class GameEngine {
     // 1. AI Tracking
     const { motionData } = aiFrame;
 
-    // 2. Game Logic (only when in PLAYING state)
+    // 2. Update Katana Position & Dynamic Angle from Hand Tracking
+    if (motionData.handDetected && motionData.fingerX >= 0 && motionData.fingerY >= 0) {
+      this.katana.setPosition(
+        motionData.fingerX,
+        motionData.fingerY,
+        true,
+        motionData.movementDirection
+      );
+    }
+    this.katana.update(dt, motionData.movementSpeed);
+
+    // 3. Update Ambient Interactive Background
+    this.background.update(dt, this.katana.x, this.katana.y, motionData.isCutting);
+
+    // 4. Game Logic (only when in PLAYING state)
     if (this.stateMgr.isPlaying) {
       if (this.timer.isTimeUp) {
         this.stateMgr.triggerGameOver();
@@ -143,11 +166,14 @@ export class GameEngine {
         }
       }
 
-      // Check slicing collisions
+      // Check slicing collisions along blade trajectory
       const active = this.spawner.getActiveFruits();
       const sliced = this.collision.checkCollisions(motionData, active);
 
       for (const fruit of sliced) {
+        // Trigger katana flash and spark effect at cut location
+        this.katana.triggerSlice(fruit.x, fruit.y);
+
         if (fruit.isBomb) {
           // Detonate bomb
           this.effects.spawnBombExplosion(fruit.x, fruit.y);
@@ -195,28 +221,29 @@ export class GameEngine {
 
   public render(
     ctx: CanvasRenderingContext2D,
-    motionData: any,
-    trackingData: any
+    motionData: any
   ) {
-    ctx.clearRect(0, 0, this.width, this.height);
+    // 1. Draw Clean Interactive Ambient Background
+    this.background.draw(ctx);
 
-    // 1. Draw fruits (both active and split halves)
+    // 2. Draw fruits (both active and split halves)
     for (const fruit of this.spawner.getAllFruits()) {
       fruit.draw(ctx);
     }
 
-    // 2. Draw VFX particles
+    // 3. Draw VFX particles (juice splashes, explosions, floating scores)
     this.effects.draw(ctx);
 
-    // 3. Draw neon blade trail along Member 1's trajectory
+    // 4. Draw cutting blade trail along trajectory
     if (motionData && motionData.trajectory) {
       this.effects.drawBladeTrail(ctx, motionData.trajectory, motionData.isCutting);
     }
 
-    // 4. Draw hand skeleton landmarks
-    if (trackingData) {
-      this.ai.drawLandmarks(ctx, trackingData);
-    }
+    // 5. Draw Mini-Katana Cutter (follows index fingertip)
+    this.katana.draw(ctx, motionData?.isCutting ?? false);
+
+    // NOTE: Webcam video and hand landmarks are NEVER drawn on canvas.
+    // The player sees ONLY the game, fruits, and the mini-katana cutter.
   }
 
   public handleKey(key: string): 'quit' | 'start' | 'restart' | 'pause' | '' {
