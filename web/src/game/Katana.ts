@@ -48,27 +48,42 @@ export class KatanaCutter {
     this.y = -1;
   }
 
-  public setPosition(targetX: number, targetY: number, isHandActive: boolean, movementAngleDeg?: number) {
+  public setPosition(
+    targetX: number,
+    targetY: number,
+    isHandActive: boolean,
+    movementAngleDeg?: number,
+    speed = 0,
+    distance = 0
+  ) {
     if (isHandActive && targetX >= 0 && targetY >= 0) {
       this.isVisible = true;
       this.targetX = targetX;
       this.targetY = targetY;
 
-      // If initial position, snap directly
+      // If initial position or re-appearing after hide, snap directly
       if (this.x < 0 || this.y < 0) {
         this.x = targetX;
         this.y = targetY;
+        this.angle = -Math.PI / 4;
+        this.targetAngle = -Math.PI / 4;
       }
 
-      // Calculate dynamic angle
-      if (movementAngleDeg !== undefined && !isNaN(movementAngleDeg)) {
-        // Convert movement degrees to radians.
-        // Movement direction is where the blade is slashing towards!
+      // Calculate dynamic angle only when motion is meaningful and intentional
+      if (
+        movementAngleDeg !== undefined &&
+        !isNaN(movementAngleDeg) &&
+        speed > 0.22 &&
+        distance > 5
+      ) {
+        // Convert movement degrees to radians. Blade tip points towards slice direction.
         const rad = (movementAngleDeg * Math.PI) / 180.0;
         this.targetAngle = rad;
       }
     } else {
       this.isVisible = false;
+      this.targetX = -1;
+      this.targetY = -1;
     }
   }
 
@@ -94,28 +109,36 @@ export class KatanaCutter {
   }
 
   public update(dt = 0.016, speed = 0) {
-    // 1. Smooth position interpolation (responsive, no lag, zero jitter)
-    if (this.targetX >= 0 && this.targetY >= 0) {
-      const lerpFactor = 0.52;
+    // 1. Smooth position interpolation (responsive, zero lag)
+    if (this.isVisible && this.targetX >= 0 && this.targetY >= 0) {
+      const lerpFactor = 0.65;
       this.x += (this.targetX - this.x) * lerpFactor;
       this.y += (this.targetY - this.y) * lerpFactor;
     }
 
     // 2. Smooth angle interpolation
-    // If stationary, ease toward -45 deg resting angle
-    if (speed < 0.12) {
+    // If stationary or moving very slowly, ease toward -45 deg resting angle
+    if (speed < 0.18) {
       this.targetAngle = -Math.PI / 4;
     }
 
-    // Shortest angular difference
+    // Shortest angular difference with proper -PI..PI wrapping
     let diff = this.targetAngle - this.angle;
     while (diff < -Math.PI) diff += Math.PI * 2;
     while (diff > Math.PI) diff -= Math.PI * 2;
-    this.angle += diff * (speed > 0.3 ? 0.35 : 0.15);
+    const turnRate = speed > 0.35 ? 0.32 : 0.16;
+    this.angle += diff * turnRate;
 
     // 3. Alpha transition (smooth appearance / disappearance)
     const targetAlpha = this.isVisible ? 1.0 : 0.0;
     this.alpha += (targetAlpha - this.alpha) * 0.25;
+
+    // When fully invisible, reset coordinates so it doesn't linger or jump
+    if (!this.isVisible && this.alpha < 0.02) {
+      this.alpha = 0;
+      this.x = -1;
+      this.y = -1;
+    }
 
     // 4. Slice flash decay
     if (this.sliceFlash > 0) {

@@ -36,6 +36,7 @@ export class HandTracker {
   private initializationError: string | null = null;
   private width = 640;
   private height = 480;
+  private lastTimestamp = -1;
 
   constructor(width = 640, height = 480) {
     this.width = width;
@@ -106,49 +107,103 @@ export class HandTracker {
   }
 
   public getTrackingData(video: HTMLVideoElement, timestampMs: number): TrackingData {
-    if (!this.isLoaded || !this.handLandmarker || video.readyState < 2) {
+    if (
+      !this.isLoaded ||
+      !this.handLandmarker ||
+      video.readyState < 2 ||
+      video.videoWidth === 0 ||
+      video.videoHeight === 0
+    ) {
       return this.emptyData();
     }
 
-    const results = this.handLandmarker.detectForVideo(video, timestampMs);
+    // MediaPipe Tasks Vision requires strictly monotonically increasing timestamps in VIDEO mode
+    let validTimestamp = Math.round(timestampMs);
+    if (validTimestamp <= this.lastTimestamp) {
+      validTimestamp = this.lastTimestamp + 1;
+    }
+    this.lastTimestamp = validTimestamp;
 
-    if (!results.landmarks || results.landmarks.length === 0) {
+    let results;
+    try {
+      results = this.handLandmarker.detectForVideo(video, validTimestamp);
+    } catch (err) {
+      console.warn('[HandTracker] detectForVideo temporary frame skip:', err);
+      return this.emptyData();
+    }
+
+    if (!results || !results.landmarks || results.landmarks.length === 0) {
       return this.emptyData();
     }
 
     // First hand detected
     const hand = results.landmarks[0];
 
-    const videoRect = video.getBoundingClientRect();
-    const videoWidth = video.videoWidth;
-    const videoHeight = video.videoHeight;
-    const objectFit = window.getComputedStyle(video).objectFit;
-    const scale = objectFit === 'cover'
-      ? Math.max(videoRect.width / videoWidth, videoRect.height / videoHeight)
-      : objectFit === 'contain'
-        ? Math.min(videoRect.width / videoWidth, videoRect.height / videoHeight)
-        : 0;
-    const renderedWidth = scale ? videoWidth * scale : videoRect.width;
-    const renderedHeight = scale ? videoHeight * scale : videoRect.height;
-    const cropX = (renderedWidth - videoRect.width) / 2;
-    const cropY = (renderedHeight - videoRect.height) / 2;
-    const transform = new DOMMatrixReadOnly(window.getComputedStyle(video).transform);
-    const mirrored = transform.a < 0;
+    // Compute intrinsic aspect-ratio cover mapping directly from stream dimensions to canvas dimensions.
+    // This decouples coordinate conversion completely from CSS/DOM bounds or hidden video sizing.
+    const videoWidth = video.videoWidth || 640;
+    const videoHeight = video.videoHeight || 480;
+    const canvasWidth = this.width > 0 ? this.width : 960;
+    const canvasHeight = this.height > 0 ? this.height : 720;
 
-    // Map raw video landmarks through object-fit cropping and the visible mirror.
+    const videoAspect = videoWidth / videoHeight;
+    const canvasAspect = canvasWidth / canvasHeight;
+
+    let scaleX = 1.0;
+    let scaleY = 1.0;
+    let offsetX = 0.0;
+    let offsetY = 0.0;
+
+    if (videoAspect > canvasAspect) {
+      // Camera is wider than canvas: crop side margins evenly
+      const scale = canvasAspect / videoAspect;
+      offsetX = (1.0 - scale) / 2.0;
+      scaleX = scale;
+    } else if (videoAspect < canvasAspect) {
+      // Camera is taller than canvas: crop top/bottom margins evenly
+      const scale = videoAspect / canvasAspect;
+      offsetY = (1.0 - scale) / 2.0;
+      scaleY = scale;
+    }
+
+    // Map raw video landmarks:
+    // 1. Cover aspect-ratio normalization
+    // 2. Horizontal mirror (1.0 - normX) so user-facing camera mirrors player's natural motion:
+    //    Move hand right -> katana moves right. Move hand left -> katana moves left.
+    // 3. Vertical alignment: Move hand up -> katana moves up. Move hand down -> katana moves down.
     const landmarksPx: HandLandmark[] = hand.map((lm) => {
-      let x = (lm.x * renderedWidth - cropX) * (this.width / videoRect.width);
-      const y = (lm.y * renderedHeight - cropY) * (this.height / videoRect.height);
-      if (mirrored) x = this.width - x;
-      return { x: Math.round(x), y: Math.round(y), z: lm.z };
+      if (!Number.isFinite(lm.x) || !Number.isFinite(lm.y)) {
+        return { x: -1, y: -1, z: 0 };
+      }
+
+      const normX = (lm.x - offsetX) / scaleX;
+      const normY = (lm.y - offsetY) / scaleY;
+
+      // Always mirror horizontally for user-facing selfie perspective
+      const mirroredNormX = 1.0 - normX;
+
+      const px = Math.round(mirroredNormX * canvasWidth);
+      const py = Math.round(normY * canvasHeight);
+
+      return {
+        x: Math.max(0, Math.min(canvasWidth, px)),
+        y: Math.max(0, Math.min(canvasHeight, py)),
+        z: lm.z,
+      };
     });
 
     const indexTip = landmarksPx[8];
+    const hasValidTip =
+      indexTip &&
+      Number.isFinite(indexTip.x) &&
+      Number.isFinite(indexTip.y) &&
+      indexTip.x >= 0 &&
+      indexTip.y >= 0;
 
     return {
-      handDetected: true,
-      fingerX: indexTip ? indexTip.x : -1,
-      fingerY: indexTip ? indexTip.y : -1,
+      handDetected: !!hasValidTip,
+      fingerX: hasValidTip ? indexTip.x : -1,
+      fingerY: hasValidTip ? indexTip.y : -1,
       landmarks: landmarksPx,
       rawLandmarks: hand,
     };

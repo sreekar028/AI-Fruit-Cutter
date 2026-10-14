@@ -36,6 +36,7 @@ export class MotionDetector {
   private prevY = -1;
   private prevTime = 0;
   private lastSeen = 0;
+  private lastDirection = -45;
 
   constructor(
     trajectoryMaxLen = 20,
@@ -52,11 +53,20 @@ export class MotionDetector {
   public update(trackingData: TrackingData): MotionData {
     const now = performance.now() / 1000.0; // seconds
 
-    if (!trackingData.handDetected) {
+    if (
+      !trackingData.handDetected ||
+      trackingData.fingerX < 0 ||
+      trackingData.fingerY < 0
+    ) {
+      // Disconnect previous anchor point immediately so re-detection does not create a false cross-screen swipe
+      this.prevX = -1;
+      this.prevY = -1;
+      this.prevTime = 0;
+
       if (this.lastSeen > 0 && now - this.lastSeen > this.handLostResetSec) {
         this.reset();
       }
-      return this.buildOutput(false, -1, -1, 0, 0, 0, false);
+      return this.buildOutput(false, -1, -1, 0, 0, this.lastDirection, false);
     }
 
     const fx = trackingData.fingerX;
@@ -65,13 +75,14 @@ export class MotionDetector {
 
     let distance = 0;
     let speed = 0;
-    let direction = 0;
+    let direction = this.lastDirection;
 
     if (this.prevX === -1) {
-      // First frame with hand
+      // First frame after acquiring/re-acquiring hand
       distance = 0;
       speed = 0;
-      direction = 0;
+      direction = this.lastDirection;
+      this.trajectory = [[fx, fy]];
     } else {
       const dx = fx - this.prevX;
       const dy = fy - this.prevY;
@@ -80,19 +91,27 @@ export class MotionDetector {
       const dtMs = (now - this.prevTime) * 1000.0;
       speed = dtMs > 0 ? distance / dtMs : 0;
 
-      // Angle in degrees: 0 = right, 90 = down
-      direction = (Math.atan2(dy, dx) * 180.0) / Math.PI;
+      // Only recompute direction angle when movement exceeds noise threshold (4 px)
+      // Angle in degrees: 0 = right, 90 = down, 180/-180 = left, -90 = up
+      if (distance > 4) {
+        direction = (Math.atan2(dy, dx) * 180.0) / Math.PI;
+        this.lastDirection = direction;
+      } else {
+        direction = this.lastDirection;
+      }
+
+      // Update trajectory buffer
+      this.trajectory.push([fx, fy]);
+      if (this.trajectory.length > this.trajectoryMaxLen) {
+        this.trajectory.shift();
+      }
     }
 
-    // Update trajectory buffer
-    this.trajectory.push([fx, fy]);
-    if (this.trajectory.length > this.trajectoryMaxLen) {
-      this.trajectory.shift();
-    }
-
-    // Cutting condition
+    // Cutting condition requires actual motion between consecutive tracked frames
     const isCutting =
-      distance >= this.cutDistanceMin && speed >= this.cutSpeedThreshold;
+      this.prevX !== -1 &&
+      distance >= this.cutDistanceMin &&
+      speed >= this.cutSpeedThreshold;
 
     const output = this.buildOutput(
       true,
@@ -121,6 +140,7 @@ export class MotionDetector {
     this.prevY = -1;
     this.prevTime = 0;
     this.lastSeen = 0;
+    this.lastDirection = -45;
   }
 
   private buildOutput(

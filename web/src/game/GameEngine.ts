@@ -130,13 +130,19 @@ export class GameEngine {
     const { motionData } = aiFrame;
 
     // 2. Update Katana Position & Dynamic Angle from Hand Tracking
-    if (motionData.handDetected && motionData.fingerX >= 0 && motionData.fingerY >= 0) {
-      this.katana.setPosition(
-        motionData.fingerX,
-        motionData.fingerY,
-        true,
-        motionData.movementDirection
-      );
+    if (this.ai.running) {
+      if (motionData.handDetected && motionData.fingerX >= 0 && motionData.fingerY >= 0) {
+        this.katana.setPosition(
+          motionData.fingerX,
+          motionData.fingerY,
+          true,
+          motionData.movementDirection,
+          motionData.movementSpeed,
+          motionData.movementDistance
+        );
+      } else {
+        this.katana.setPosition(-1, -1, false);
+      }
     }
     this.katana.update(dt, motionData.movementSpeed);
 
