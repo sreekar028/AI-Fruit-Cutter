@@ -55,7 +55,7 @@ export const StartOverlay: React.FC<StartOverlayProps> = ({
           <ul className="instruction-list">
             <li>
               <span className="inst-badge">1. SLICE</span>
-              <span>Wave your <strong>index fingertip</strong> quickly across fruits to slice them.</span>
+              <span>Control your <strong>mini-katana</strong> with your index fingertip (or mouse) to slice fruits.</span>
             </li>
             <li>
               <span className="inst-badge">2. COMBOS</span>

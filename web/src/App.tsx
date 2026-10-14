@@ -213,8 +213,8 @@ export const App: React.FC = () => {
           const aiFrame = engine.ai.tick(timestamp);
           const status = engine.update(timestamp, aiFrame);
 
-          // 2. Render Canvas Game Elements
-          engine.render(ctx, aiFrame.motionData, aiFrame.trackingData);
+          // 2. Render Canvas Game Elements (Background, Fruits, Particles, Katana)
+          engine.render(ctx, aiFrame.motionData);
 
           // 3. Throttled React state updates to avoid re-rendering React every frame
           const last = lastDispatchedRef.current;
@@ -250,18 +250,34 @@ export const App: React.FC = () => {
     const x = ((e.clientX - rect.left) / rect.width) * (engineRef.current?.width ?? rect.width);
     const y = ((e.clientY - rect.top) / rect.height) * (engineRef.current?.height ?? rect.height);
     lastMousePosRef.current = { x, y };
+
+    if (engineRef.current) {
+      engineRef.current.katana.setPosition(Math.round(x), Math.round(y), true);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isMouseDownRef.current || !engineRef.current) return;
+    if (!engineRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * (engineRef.current?.width ?? rect.width);
     const y = ((e.clientY - rect.top) / rect.height) * (engineRef.current?.height ?? rect.height);
+
+    if (!isMouseDownRef.current) {
+      // If camera is not running, let mouse position move katana as cursor
+      if (!engineRef.current.ai.running) {
+        engineRef.current.katana.setPosition(Math.round(x), Math.round(y), true);
+      }
+      return;
+    }
 
     const prev = lastMousePosRef.current || { x, y };
     const dx = x - prev.x;
     const dy = y - prev.y;
     const dist = Math.hypot(dx, dy);
+    const movementDirection = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+    // Update katana cursor
+    engineRef.current.katana.setPosition(Math.round(x), Math.round(y), true, movementDirection);
 
     // Inject simulated motion data for mouse/touch slice
     if (dist > 15) {
@@ -273,7 +289,7 @@ export const App: React.FC = () => {
         previousY: Math.round(prev.y),
         movementDistance: dist,
         movementSpeed: 0.8,
-        movementDirection: (Math.atan2(dy, dx) * 180) / Math.PI,
+        movementDirection,
         trajectory: [[prev.x, prev.y], [x, y]] as Array<[number, number]>,
         isCutting: true,
       };
@@ -282,6 +298,8 @@ export const App: React.FC = () => {
         const active = engineRef.current.spawner.getActiveFruits();
         const sliced = engineRef.current.collision.checkCollisions(simulatedMotion, active);
         for (const fruit of sliced) {
+          engineRef.current.katana.triggerSlice(fruit.x, fruit.y);
+
           if (fruit.isBomb) {
             engineRef.current.effects.spawnBombExplosion(fruit.x, fruit.y);
             engineRef.current.livesMgr.onBombCut();
@@ -301,6 +319,9 @@ export const App: React.FC = () => {
   const handlePointerUp = () => {
     isMouseDownRef.current = false;
     lastMousePosRef.current = null;
+    if (engineRef.current && !engineRef.current.ai.running) {
+      engineRef.current.katana.setPosition(-1, -1, false);
+    }
   };
 
   return (
