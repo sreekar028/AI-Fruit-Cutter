@@ -277,7 +277,14 @@ export const App: React.FC = () => {
     const movementDirection = (Math.atan2(dy, dx) * 180) / Math.PI;
 
     // Update katana cursor
-    engineRef.current.katana.setPosition(Math.round(x), Math.round(y), true, movementDirection);
+    engineRef.current.katana.setPosition(
+      Math.round(x),
+      Math.round(y),
+      true,
+      movementDirection,
+      0.8,
+      dist
+    );
 
     // Inject simulated motion data for mouse/touch slice
     if (dist > 15) {

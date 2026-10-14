@@ -29,6 +29,7 @@ export class AIController {
   private height = 480;
   private startPromise: Promise<CameraInitResult> | null = null;
   private startGeneration = 0;
+  private consecutiveErrors = 0;
 
   public onDisconnect?: () => void;
   public onError?: (message: string) => void;
@@ -200,15 +201,23 @@ export class AIController {
     try {
       const trackingData = this.tracker.getTrackingData(this.video, timestampMs);
       const motionData = this.detector.update(trackingData);
+      this.consecutiveErrors = 0;
 
       return { motionData, trackingData };
     } catch (error) {
+      this.consecutiveErrors++;
       const detail = error instanceof Error ? error.message : String(error);
-      console.error('[AIController] Hand detection stopped:', error);
-      this.stop();
+
+      if (this.consecutiveErrors >= 10) {
+        console.error('[AIController] Hand detection stopped after repeated errors:', error);
+        this.stop();
+        this.onError?.(`Hand detection stopped: ${detail}`);
+      } else {
+        console.warn(`[AIController] Transient frame detection glitch (${this.consecutiveErrors}/10):`, detail);
+      }
+
       const emptyTracking = this.emptyTrackingData();
       const motionData = this.detector.update(emptyTracking);
-      this.onError?.(`Hand detection stopped: ${detail}`);
       return { motionData, trackingData: emptyTracking };
     }
   }
