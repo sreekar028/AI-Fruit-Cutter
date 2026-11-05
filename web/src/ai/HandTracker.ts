@@ -9,6 +9,7 @@
  */
 
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import { validateHandLandmarks, type ValidatedHandData } from '../utils/validateHandLandmarks.ts';
 
 const MEDIAPIPE_WASM_URL =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
@@ -27,6 +28,7 @@ export interface TrackingData {
   fingerY: number;
   landmarks: HandLandmark[];
   rawLandmarks: any;
+  validatedML?: ValidatedHandData;
 }
 
 export class HandTracker {
@@ -200,12 +202,15 @@ export class HandTracker {
       indexTip.x >= 0 &&
       indexTip.y >= 0;
 
+    const validatedML = validateHandLandmarks(hand, validTimestamp, true);
+
     return {
-      handDetected: !!hasValidTip,
+      handDetected: Boolean(hasValidTip && validatedML.valid),
       fingerX: hasValidTip ? indexTip.x : -1,
       fingerY: hasValidTip ? indexTip.y : -1,
       landmarks: landmarksPx,
       rawLandmarks: hand,
+      validatedML,
     };
   }
 
